@@ -26,16 +26,34 @@ const rooms = {
     }
 };
 
+// Basit kullanıcı veritabanı (Render'da her deploy'da sıfırlanır)
+const registeredUsers = {}; // username -> { password, avatar }
+
 io.on('connection', (socket) => {
     console.log('Yeni bir kullanıcı bağlandı:', socket.id);
 
     // Kullanıcı odaya katılmak istediğinde
-    socket.on('join-room', ({ username }) => {
+    socket.on('join-room', ({ username, password, avatar }) => {
         const roomId = 'genel-sohbet';
         
+        // Şifre kontrolü
+        if (registeredUsers[username]) {
+            if (registeredUsers[username].password !== password) {
+                return socket.emit('login-error', 'Hatalı şifre! Bu kullanıcı adı rezerve edilmiş.');
+            }
+        } else {
+            // İlk kez giriş yapıyorsa "mersin" şifresini zorunlu tut (kullanıcı bazlı)
+            if (password !== 'mersin') {
+                return socket.emit('login-error', 'İlk giriş için doğru şifreyi girmelisiniz!');
+            }
+            // Kaydet
+            registeredUsers[username] = { password: password, avatar: avatar || null };
+        }
+
         socket.join(roomId);
         socket.username = username;
         socket.roomId = roomId;
+        socket.avatar = avatar || registeredUsers[username].avatar;
 
         // Mevcut kullanıcı listesini (kendisi hariç) yeni kullanıcıya gönder
         const usersInRoom = [];
@@ -44,7 +62,8 @@ io.on('connection', (socket) => {
             if (userSocket) {
                 usersInRoom.push({
                     userId: id,
-                    username: userSocket.username
+                    username: userSocket.username,
+                    avatar: userSocket.avatar
                 });
             }
         });
@@ -58,7 +77,8 @@ io.on('connection', (socket) => {
         // Odaya yeni birinin katıldığını diğerlerine bildir
         socket.to(roomId).emit('user-connected', {
             userId: socket.id,
-            username: username
+            username: username,
+            avatar: socket.avatar
         });
 
         console.log(`${username} (${socket.id}) ${roomId} odasına katıldı.`);
@@ -71,6 +91,21 @@ io.on('connection', (socket) => {
                 socket.to(roomId).emit('user-disconnected', socket.id);
             }
         });
+    });
+
+    // Profil Güncelleme
+    socket.on('update-profile', ({ username, avatar }) => {
+        if (socket.username && registeredUsers[socket.username]) {
+            // Sadece avatar güncelleniyor (basitlik için)
+            socket.avatar = avatar;
+            registeredUsers[socket.username].avatar = avatar;
+            
+            io.to(socket.roomId).emit('user-profile-updated', {
+                userId: socket.id,
+                username: socket.username,
+                avatar: avatar
+            });
+        }
     });
 
     // WebRTC Sinyalleşme (Offer, Answer, ICE Candidate)

@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sohbet DC - Sesli Sohbet Uygulaması</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
@@ -12,61 +12,127 @@
         .discord-main { background-color: #36393f; }
         .discord-users { background-color: #2f3136; }
         .discord-footer { background-color: #292b2f; }
+        
+        /* Mobil Menü Animasyonları */
+        .mobile-sidebar-active { transform: translateX(0) !important; }
+        .mobile-users-active { transform: translateX(0) !important; }
+        
+        @media (max-width: 768px) {
+            .discord-sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                z-index: 40;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
+            }
+            .discord-users {
+                position: fixed;
+                right: 0;
+                top: 0;
+                bottom: 0;
+                z-index: 40;
+                transform: translateX(100%);
+                transition: transform 0.3s ease-in-out;
+                display: block !important;
+                width: 240px;
+            }
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white h-screen flex flex-col">
+<body class="bg-gray-900 text-white h-screen flex flex-col overflow-hidden">
 
     <!-- Giriş Ekranı (Overlay) -->
-    <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
-        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-96">
+    <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 p-6 md:p-8 rounded-lg shadow-xl w-full max-w-sm">
             <h2 class="text-2xl font-bold mb-6 text-center">Hoş Geldiniz</h2>
             <div class="mb-4">
                 <label class="block text-sm font-medium mb-2">Kullanıcı Adı</label>
-                <input type="text" id="username-input" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="Adınızı girin...">
+                <input type="text" id="username-input" class="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-base" placeholder="Adınızı girin...">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2">Giriş Şifresi</label>
+                <input type="password" id="password-input" class="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 text-base" placeholder="Şifrenizi girin">
             </div>
             <div class="mb-6">
-                <p class="text-sm text-gray-400 text-center">Tüm kullanıcılar "Genel Sohbet" odasına katılacaktır.</p>
                 <input type="hidden" id="room-input" value="genel-sohbet">
             </div>
-            <button id="join-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded transition duration-200">
+            <button id="join-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded transition duration-200 text-lg">
                 Giriş Yap
             </button>
         </div>
     </div>
 
+    <!-- Ayarlar Modalı -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 hidden p-4">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold">Profil Ayarları</h2>
+                <button onclick="closeSettings()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="mb-6 flex flex-col items-center">
+                <div class="relative group cursor-pointer" onclick="document.getElementById('avatar-upload').click()">
+                    <div id="settings-avatar-preview" class="w-24 h-24 rounded-full bg-indigo-500 flex items-center justify-center text-3xl font-bold overflow-hidden">
+                        ?
+                    </div>
+                    <div class="absolute inset-0 bg-black bg-opacity-40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-camera text-xl"></i>
+                    </div>
+                    <input type="file" id="avatar-upload" class="hidden" accept="image/*">
+                </div>
+                <p class="text-xs text-gray-400 mt-2">Profil resmi seçmek için tıkla</p>
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium mb-2">Görünen Ad</label>
+                <input type="text" id="settings-username" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500" disabled>
+                <p class="text-xs text-gray-500 mt-1">Kullanıcı adı değiştirme şu an kapalıdır.</p>
+            </div>
+            <button onclick="saveSettings()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded transition duration-200">
+                Kaydet
+            </button>
+        </div>
+    </div>
+
+    <!-- Mobil Overlay (Karartma) -->
+    <div id="mobile-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden"></div>
+
     <!-- Ana Uygulama Yapısı -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 overflow-hidden relative">
         
         <!-- Sol Kenar Çubuğu (Odalar) -->
-        <div class="w-64 discord-sidebar flex flex-col">
-            <div class="p-4 shadow-md font-bold text-lg border-b border-gray-800">
-                Sunucu Odaları
+        <div id="sidebar" class="w-64 discord-sidebar flex flex-col h-full">
+            <div class="p-4 shadow-md font-bold text-lg border-b border-gray-800 flex justify-between items-center">
+                <span>Kanallar</span>
+                <button class="md:hidden text-gray-400" onclick="toggleSidebar()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             <div class="flex-1 overflow-y-auto p-2" id="room-list">
-                <div class="p-2 mb-1 rounded bg-gray-700 flex items-center">
+                <div class="p-3 mb-1 rounded bg-gray-700 flex items-center">
                     <i class="fas fa-volume-up mr-3 text-green-400"></i>
                     <span class="truncate">Genel Sohbet</span>
                 </div>
             </div>
             <!-- Kullanıcı Ayarları (Alt Kısım) -->
-            <div class="discord-footer p-3 flex items-center justify-between">
-                <div class="flex items-center">
-                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold mr-2" id="user-avatar-initial">
+            <div class="discord-footer p-3 flex items-center justify-between mt-auto">
+                <div class="flex items-center min-w-0">
+                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex-shrink-0 flex items-center justify-center font-bold mr-2" id="user-avatar-initial">
                         ?
                     </div>
-                    <div class="text-sm">
-                        <div class="font-bold truncate w-24" id="display-username">Misafir</div>
+                    <div class="text-sm min-w-0">
+                        <div class="font-bold truncate" id="display-username">Misafir</div>
                         <div class="text-xs text-gray-400">#0001</div>
                     </div>
                 </div>
-                <div class="flex space-x-2">
-                    <button id="toggle-mic" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Mikrofonu Kapat/Aç">
+                <div class="flex space-x-1 flex-shrink-0">
+                    <button id="toggle-mic" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white">
                         <i class="fas fa-microphone"></i>
                     </button>
-                    <button id="toggle-audio" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Sesi Kapat/Aç">
+                    <button id="toggle-audio" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white">
                         <i class="fas fa-headphones"></i>
                     </button>
-                    <button class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Ayarlar">
+                    <button onclick="openSettings()" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Ayarlar">
                         <i class="fas fa-cog"></i>
                     </button>
                 </div>
@@ -74,28 +140,45 @@
         </div>
 
         <!-- Orta Panel (Yazılı Sohbet) -->
-        <div class="flex-1 flex flex-col discord-main">
-            <div class="p-4 shadow-md border-b border-gray-800 flex items-center">
-                <i class="fas fa-hashtag mr-2 text-gray-400 text-xl"></i>
-                <span class="font-bold text-lg" id="chat-header">genel</span>
+        <div class="flex-1 flex flex-col discord-main h-full w-full">
+            <!-- Header -->
+            <div class="p-3 md:p-4 shadow-md border-b border-gray-800 flex items-center justify-between sticky top-0 bg-inherit z-10">
+                <div class="flex items-center">
+                    <button class="md:hidden mr-3 text-gray-400 hover:text-white" onclick="toggleSidebar()">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                    <i class="fas fa-hashtag mr-2 text-gray-400 text-xl"></i>
+                    <span class="font-bold text-lg" id="chat-header">genel</span>
+                </div>
+                <button class="md:hidden text-gray-400 hover:text-white" onclick="toggleUsers()">
+                    <i class="fas fa-users text-xl"></i>
+                </button>
             </div>
-            <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
-                <!-- Mesajlar buraya gelecek -->
+
+            <!-- Messages -->
+            <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
                 <div class="text-gray-500 text-center text-sm italic">Sohbetin başlangıcı...</div>
             </div>
-            <div class="p-4">
-                <div class="bg-gray-700 rounded-lg p-3 flex items-center">
-                    <button class="mr-3 text-gray-400 hover:text-white">
-                        <i class="fas fa-plus-circle text-xl"></i>
+
+            <!-- Input Area -->
+            <div class="p-3 md:p-4">
+                <div class="bg-gray-700 rounded-lg px-3 py-2 md:py-3 flex items-center shadow-inner">
+                    <button class="mr-3 text-gray-400 hover:text-white flex-shrink-0">
+                        <i class="fas fa-plus-circle text-xl md:text-2xl"></i>
                     </button>
-                    <input type="text" id="chat-input" class="bg-transparent flex-1 focus:outline-none" placeholder="Buraya mesaj yazın...">
+                    <input type="text" id="chat-input" class="bg-transparent flex-1 focus:outline-none text-base" placeholder="Mesaj gönder...">
                 </div>
             </div>
         </div>
 
         <!-- Sağ Kenar Çubuğu (Kullanıcılar) -->
-        <div class="w-60 discord-users p-4 overflow-y-auto hidden md:block">
-            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">ÇEVRİMİÇİ — <span id="online-count">0</span></h3>
+        <div id="users-panel" class="w-60 discord-users p-4 overflow-y-auto h-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">ÇEVRİMİÇİ — <span id="online-count">0</span></h3>
+                <button class="md:hidden text-gray-400" onclick="toggleUsers()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
             <div id="online-users-list" class="space-y-2">
                 <!-- Online kullanıcılar buraya gelecek -->
             </div>

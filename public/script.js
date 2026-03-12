@@ -14,6 +14,53 @@ const onlineUsersList = document.getElementById('online-users-list');
 const audioContainer = document.getElementById('audio-container');
 const toggleMicBtn = document.getElementById('toggle-mic');
 const toggleAudioBtn = document.getElementById('toggle-audio');
+const sidebar = document.getElementById('sidebar');
+const usersPanel = document.getElementById('users-panel');
+const mobileOverlay = document.getElementById('mobile-overlay');
+const passwordInput = document.getElementById('password-input');
+const settingsModal = document.getElementById('settings-modal');
+const avatarUpload = document.getElementById('avatar-upload');
+const settingsAvatarPreview = document.getElementById('settings-avatar-preview');
+
+let myAvatar = localStorage.getItem('chat-avatar') || null;
+
+// Sayfa yüklendiğinde hatırlanan bilgileri doldur
+window.addEventListener('load', () => {
+    const savedName = localStorage.getItem('chat-username');
+    const savedPass = localStorage.getItem('chat-password');
+    if (savedName) {
+        usernameInput.value = savedName;
+    }
+    if (savedPass) {
+        passwordInput.value = savedPass;
+    }
+});
+
+// Mobil Menü Fonksiyonları
+function toggleSidebar() {
+    sidebar.classList.toggle('mobile-sidebar-active');
+    mobileOverlay.classList.toggle('hidden');
+    // Eğer diğer panel açıksa kapat
+    if (usersPanel.classList.contains('mobile-users-active')) {
+        usersPanel.classList.remove('mobile-users-active');
+    }
+}
+
+function toggleUsers() {
+    usersPanel.classList.toggle('mobile-users-active');
+    mobileOverlay.classList.toggle('hidden');
+    // Eğer diğer panel açıksa kapat
+    if (sidebar.classList.contains('mobile-sidebar-active')) {
+        sidebar.classList.remove('mobile-sidebar-active');
+    }
+}
+
+// Overlay'e tıklandığında her şeyi kapat
+mobileOverlay.addEventListener('click', () => {
+    sidebar.classList.remove('mobile-sidebar-active');
+    usersPanel.classList.remove('mobile-users-active');
+    mobileOverlay.classList.add('hidden');
+});
 
 // WebRTC Yapılandırması (Ücretsiz STUN sunucuları kullanılır)
 const rtcConfig = {
@@ -33,28 +80,28 @@ let isAudioOn = true;
 // 1. Giriş Yapma
 joinBtn.addEventListener('click', async () => {
     myUsername = usernameInput.value.trim() || 'Anonim';
+    const password = passwordInput.value.trim();
     currentRoomId = 'genel-sohbet';
 
     if (myUsername) {
+        if (!password) {
+            alert('Lütfen şifrenizi girin!');
+            return;
+        }
+
         try {
             // Mikrofona erişim iste
             if (!localStream) {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             }
             
-            // UI Güncelle
-            loginOverlay.classList.add('hidden');
-            document.getElementById('display-username').innerText = myUsername;
-            document.getElementById('user-avatar-initial').innerText = myUsername[0].toUpperCase();
-            document.getElementById('chat-header').innerText = 'Genel Sohbet';
-
-            // Sunucuya katılma isteği gönder
-            socket.emit('join-room', { username: myUsername });
+            // Sunucuya katılma isteği gönder (Şifre ile birlikte)
+            socket.emit('join-room', { 
+                username: myUsername, 
+                password: password,
+                avatar: myAvatar 
+            });
             
-            // Kendimizi listeye ekle
-            updateUserList(socket.id, myUsername, true);
-            
-            console.log('Genel odaya katılındı');
         } catch (err) {
             alert('Mikrofon erişimi reddedildi veya bulunamadı!');
             console.error('Medya hatası:', err);
@@ -62,18 +109,106 @@ joinBtn.addEventListener('click', async () => {
     }
 });
 
-// Odaya ilk girildiğinde mevcut kullanıcıları al
+// Giriş Hatası
+socket.on('login-error', (msg) => {
+    alert(msg);
+});
+
+// Giriş Başarılı (İlk kullanıcı listesi gelince girişi tamamla)
 socket.on('initial-users', (users) => {
+    // UI Güncelle
+    loginOverlay.classList.add('hidden');
+    document.getElementById('display-username').innerText = myUsername;
+    document.getElementById('user-avatar-initial').innerText = myUsername[0].toUpperCase();
+    if (myAvatar) {
+        document.getElementById('user-avatar-initial').innerHTML = `<img src="${myAvatar}" class="w-full h-full object-cover">`;
+    }
+    document.getElementById('chat-header').innerText = 'Genel Sohbet';
+
+    // Bilgileri hatırla
+    localStorage.setItem('chat-username', myUsername);
+    localStorage.setItem('chat-password', passwordInput.value.trim());
+    
+    // Listeyi doldur
     users.forEach(user => {
-        updateUserList(user.userId, user.username, true);
+        updateUserList(user.userId, user.username, true, user.avatar);
     });
+
+    // Kendimizi listeye ekle
+    updateUserList(socket.id, myUsername, true, myAvatar);
+    console.log('Genel odaya katılındı');
+});
+
+// Ayarlar Fonksiyonları
+function openSettings() {
+    settingsModal.classList.remove('hidden');
+    document.getElementById('settings-username').value = myUsername;
+    if (myAvatar) {
+        settingsAvatarPreview.innerHTML = `<img src="${myAvatar}" class="w-full h-full object-cover">`;
+    } else {
+        settingsAvatarPreview.innerText = myUsername[0].toUpperCase();
+    }
+}
+
+function closeSettings() {
+    settingsModal.classList.add('hidden');
+}
+
+avatarUpload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            myAvatar = event.target.result;
+            settingsAvatarPreview.innerHTML = `<img src="${myAvatar}" class="w-full h-full object-cover">`;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+function saveSettings() {
+    // Avatarı kaydet
+    if (myAvatar) {
+        localStorage.setItem('chat-avatar', myAvatar);
+        document.getElementById('user-avatar-initial').innerHTML = `<img src="${myAvatar}" class="w-full h-full object-cover">`;
+    }
+    
+    // Sunucuya bildir
+    socket.emit('update-profile', { 
+        username: myUsername, 
+        avatar: myAvatar 
+    });
+    
+    // Kendi listemizi güncelle
+    const myUserEl = document.getElementById(`user-${socket.id}`);
+    if (myUserEl) {
+        const avatarEl = myUserEl.querySelector('.w-8.h-8');
+        if (myAvatar) {
+            avatarEl.innerHTML = `<img src="${myAvatar}" class="w-full h-full object-cover">`;
+        }
+    }
+
+    closeSettings();
+}
+
+// Profil Güncelleme Dinle
+socket.on('user-profile-updated', ({ userId, username, avatar }) => {
+    const userEl = document.getElementById(`user-${userId}`);
+    if (userEl) {
+        const avatarEl = userEl.querySelector('.w-8.h-8');
+        if (avatar) {
+            avatarEl.innerHTML = `<img src="${avatar}" class="w-full h-full object-cover">`;
+        } else {
+            avatarEl.innerHTML = username[0].toUpperCase();
+        }
+    }
 });
 
 // 2. Yeni Bir Kullanıcı Bağlandığında (Oda arkadaşı)
-socket.on('user-connected', async ({ userId, username }) => {
+socket.on('user-connected', async ({ userId, username, avatar }) => {
     console.log('Yeni kullanıcı bağlandı:', username, userId);
     addMessage('Sistem', `${username} odaya katıldı.`, 'italic');
-    updateUserList(userId, username, true);
+    updateUserList(userId, username, true, avatar);
 
     // Yeni gelen kullanıcıya bir "Offer" (Teklif) gönder (Bağlantıyı başlatan taraf biziz)
     createPeerConnection(userId, username, true);
@@ -97,6 +232,7 @@ socket.on('user-disconnected', (userId) => {
 socket.on('signal', async ({ from, signal, username }) => {
     if (!myPeerConnections[from]) {
         // Eğer henüz bir bağlantı yoksa oluştur (Cevap veren tarafız)
+        // Not: Yeni gelen kullanıcının avatar bilgisini buradan alamıyoruz ama updateUserList'te zaten eklenmiş olacak
         createPeerConnection(from, username, false);
     }
 
@@ -160,8 +296,6 @@ function createPeerConnection(userId, username, isInitiator) {
             }
         };
     }
-
-    updateUserList(userId, username, true);
 }
 
 // 6. Yazılı Sohbet İşlemleri
@@ -191,16 +325,26 @@ function addMessage(user, msg, style = '') {
 }
 
 // 7. UI Yardımcı Fonksiyonları
-function updateUserList(userId, username, isOnline) {
-    if (document.getElementById(`user-${userId}`)) return;
+function updateUserList(userId, username, isOnline, avatar = null) {
+    if (document.getElementById(`user-${userId}`)) {
+        // Varsa avatarı güncelle
+        const avatarEl = document.getElementById(`user-${userId}`).querySelector('.w-8.h-8');
+        if (avatar) avatarEl.innerHTML = `<img src="${avatar}" class="w-full h-full object-cover">`;
+        return;
+    }
 
     const userDiv = document.createElement('div');
     userDiv.id = `user-${userId}`;
     userDiv.className = "flex items-center p-1 rounded hover:bg-gray-700 cursor-pointer group";
+    
+    const avatarContent = avatar 
+        ? `<img src="${avatar}" class="w-full h-full object-cover">` 
+        : username[0].toUpperCase();
+
     userDiv.innerHTML = `
         <div class="relative">
-            <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold mr-3">
-                ${username[0].toUpperCase()}
+            <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold mr-3 overflow-hidden">
+                ${avatarContent}
             </div>
             <div class="absolute bottom-0 right-2 w-3 h-3 bg-green-500 border-2 border-gray-800 rounded-full"></div>
         </div>
