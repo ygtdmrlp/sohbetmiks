@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sohbet DC - Sesli Sohbet Uygulaması</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .discord-sidebar { background-color: #2f3136; }
+        .discord-main { background-color: #36393f; }
+        .discord-users { background-color: #2f3136; }
+        .discord-footer { background-color: #292b2f; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col">
+
+    <!-- Giriş Ekranı (Overlay) -->
+    <div id="login-overlay" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-xl w-96">
+            <h2 class="text-2xl font-bold mb-6 text-center">Hoş Geldiniz</h2>
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2">Kullanıcı Adı</label>
+                <input type="text" id="username-input" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="Adınızı girin...">
+            </div>
+            <div class="mb-6">
+                <p class="text-sm text-gray-400 text-center">Tüm kullanıcılar "Genel Sohbet" odasına katılacaktır.</p>
+                <input type="hidden" id="room-input" value="genel-sohbet">
+            </div>
+            <button id="join-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded transition duration-200">
+                Giriş Yap
+            </button>
+        </div>
+    </div>
+
+    <!-- Ana Uygulama Yapısı -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Sol Kenar Çubuğu (Odalar) -->
+        <div class="w-64 discord-sidebar flex flex-col">
+            <div class="p-4 shadow-md font-bold text-lg border-b border-gray-800">
+                Sunucu Odaları
+            </div>
+            <div class="flex-1 overflow-y-auto p-2" id="room-list">
+                <div class="p-2 mb-1 rounded bg-gray-700 flex items-center">
+                    <i class="fas fa-volume-up mr-3 text-green-400"></i>
+                    <span class="truncate">Genel Sohbet</span>
+                </div>
+            </div>
+            <!-- Kullanıcı Ayarları (Alt Kısım) -->
+            <div class="discord-footer p-3 flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold mr-2" id="user-avatar-initial">
+                        ?
+                    </div>
+                    <div class="text-sm">
+                        <div class="font-bold truncate w-24" id="display-username">Misafir</div>
+                        <div class="text-xs text-gray-400">#0001</div>
+                    </div>
+                </div>
+                <div class="flex space-x-2">
+                    <button id="toggle-mic" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Mikrofonu Kapat/Aç">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button id="toggle-audio" class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Sesi Kapat/Aç">
+                        <i class="fas fa-headphones"></i>
+                    </button>
+                    <button class="p-2 hover:bg-gray-700 rounded text-gray-400 hover:text-white" title="Ayarlar">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orta Panel (Yazılı Sohbet) -->
+        <div class="flex-1 flex flex-col discord-main">
+            <div class="p-4 shadow-md border-b border-gray-800 flex items-center">
+                <i class="fas fa-hashtag mr-2 text-gray-400 text-xl"></i>
+                <span class="font-bold text-lg" id="chat-header">genel</span>
+            </div>
+            <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <!-- Mesajlar buraya gelecek -->
+                <div class="text-gray-500 text-center text-sm italic">Sohbetin başlangıcı...</div>
+            </div>
+            <div class="p-4">
+                <div class="bg-gray-700 rounded-lg p-3 flex items-center">
+                    <button class="mr-3 text-gray-400 hover:text-white">
+                        <i class="fas fa-plus-circle text-xl"></i>
+                    </button>
+                    <input type="text" id="chat-input" class="bg-transparent flex-1 focus:outline-none" placeholder="Buraya mesaj yazın...">
+                </div>
+            </div>
+        </div>
+
+        <!-- Sağ Kenar Çubuğu (Kullanıcılar) -->
+        <div class="w-60 discord-users p-4 overflow-y-auto hidden md:block">
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">ÇEVRİMİÇİ — <span id="online-count">0</span></h3>
+            <div id="online-users-list" class="space-y-2">
+                <!-- Online kullanıcılar buraya gelecek -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Ses Elementleri (Gizli) -->
+    <div id="audio-container" class="hidden"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
